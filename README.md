@@ -1,0 +1,67 @@
+# ctxward
+
+A Claude Code plugin that keeps chosen environment variables out of what the model sees: their **values**, and
+optionally their **names**. It works on tool output and on your prompts.
+
+You list variable names. ctxward reads the values from the environment Claude Code was started in, holds them in
+memory, and never stores them. See [DESIGN.md](DESIGN.md).
+
+**It is a best-effort filter for accidental exposure, not a security boundary.** See *Not covered*.
+
+## Install
+
+```
+/plugin marketplace add SchreiverJ/ctxward
+/plugin install ctxward@ctxward
+```
+
+Prebuilt binaries for Linux, macOS (Apple Silicon and Intel) and Windows are in the repository; no Go toolchain
+is needed. Update with `/plugin marketplace update ctxward`, remove with `/plugin uninstall ctxward`.
+To build from source instead: `make dist` (needs Go), then `claude --plugin-dir /path/to/ctxward`.
+
+## Set up
+
+1. Create the config file (run `ctxward check` to see the exact path):
+   Linux `~/.config/ctxward/vars`, macOS `~/Library/Application Support/ctxward/vars`, Windows `%AppData%\ctxward\vars`.
+   Start `claude` from a terminal where the variables are exported; apps launched from the Dock or Spotlight do not see shell-profile variables.
+
+   ```
+   GITHUB_TOKEN                 # hide the value only; the name stays visible (the default)
+   STRIPE_SECRET_KEY   value    # same, written out
+   DATABASE_PASSWORD   both     # hide the value and the name
+   ```
+
+2. Export those variables in the shell that starts Claude Code, then start it.
+3. `ctxward check` (via `scripts/ctxward-launch check`) shows what is protected, as counts only.
+
+## What happens
+
+| You / the model | Result |
+|---|---|
+| A tool prints a value or a hidden name | the model sees `[REDACTED]` |
+| You type a value or a hidden name in a prompt | the prompt is blocked, nothing is sent, the reason names nothing |
+| A value is hidden while you are in auto mode | the next Bash command is not run; the session switches to manual mode so you decide what happens next |
+| The model tries to save `[REDACTED]` into a file | refused (it would corrupt your code) |
+| The model tries to read the config | refused |
+| Config exists but is broken | output is withheld and prompts are blocked until you fix it |
+| No config | nothing is protected; SessionStart says so |
+
+Values under 8 bytes (or unset) are not searched for, because they would redact ordinary words; their count is
+shown at session start. Names match as whole identifiers, so hiding `API_KEY` leaves `MY_API_KEY2` alone.
+Encodings searched: raw, URL-encoded, base64.
+
+## Not covered
+
+`@file` mentions, CLAUDE.md, pasted text, images and PDFs, MCP results flagged as errors, the raw WebFetch page,
+async subagent results, and Bash output over 30 KB (spilled raw to disk by Claude Code). A name or value in any of
+these reaches the model. A model that deliberately splits or re-encodes output also gets through, as does any
+secret not in your list.
+
+## Develop
+
+```
+make test         # go vet + go test -race
+make plugin-test  # drive the hooks through the launcher (ARGS=live also runs claude -p --plugin-dir)
+go test ./internal/vault -run xxx -bench .
+```
+

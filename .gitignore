@@ -1,0 +1,9 @@
+# Prebuilt binaries (libexec/) and SHA256SUMS are tracked: installs need no Go toolchain
+
+# Scratch, logs, test output
+*.log
+tmp/
+*.test
+*.out
+coverage.*
+*.prof

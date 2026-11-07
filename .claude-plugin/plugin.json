@@ -1,0 +1,13 @@
+{
+  "name": "ctxward",
+  "displayName": "ctxward",
+  "version": "0.2.6",
+  "description": "Keeps chosen environment variables (their values, and optionally their names) out of Claude Code's context. Best-effort; not a security boundary.",
+  "author": {
+    "name": "ctxward contributors"
+  },
+  "homepage": "https://github.com/SchreiverJ/ctxward",
+  "repository": "https://github.com/SchreiverJ/ctxward",
+  "license": "MIT",
+  "keywords": ["secrets", "redaction", "security", "hooks", "env", "credentials"]
+}

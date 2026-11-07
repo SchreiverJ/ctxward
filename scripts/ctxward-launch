@@ -1,0 +1,88 @@
+#!/bin/sh
+# ctxward-launch: select and run the ctxward binary for this platform.
+#
+#  - Never reads or echoes stdin. Never prints anything derived from hook input.
+#  - If the binary is missing or cannot run, a hook invocation answers with fixed JSON and
+#    exits 0. When a config file exists the answer fails CLOSED (deny / block), because
+#    otherwise a broken install would silently stop protecting; with no config it only warns.
+#  - Only characters from a fixed safe set are ever placed in the JSON message.
+
+# Resolve the plugin root: CLAUDE_PLUGIN_ROOT if set, else the parent of this script.
+if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+  root=$CLAUDE_PLUGIN_ROOT
+else
+  self=$0
+  case $self in
+    */*) dir=${self%/*} ;;
+    *) dir=. ;;
+  esac
+  root=$(cd "$dir/.." 2>/dev/null && pwd -P) || root=
+fi
+
+os=$(uname -s 2>/dev/null | tr 'A-Z' 'a-z')
+arch=$(uname -m 2>/dev/null | tr 'A-Z' 'a-z')
+
+case $os in
+  linux) os=linux ;;
+  darwin) os=darwin ;;
+  mingw*|msys*|cygwin*) os=windows ;;
+esac
+case $arch in
+  x86_64|amd64) arch=amd64 ;;
+  aarch64|arm64) arch=arm64 ;;
+esac
+
+# Reduce to a safe character set so the value can be embedded in JSON verbatim.
+plat=$(printf '%s-%s' "$os" "$arch" | tr -c 'A-Za-z0-9_.-' '_')
+
+bin=
+ext=
+[ "$os" = windows ] && ext=.exe
+case $plat in
+  linux-amd64|linux-arm64|darwin-arm64|darwin-amd64|windows-amd64)
+    [ -n "$root" ] && bin=$root/libexec/$plat/ctxward$ext
+    ;;
+esac
+
+# Claude Code may not keep the exec bit when it copies the plugin; try to restore it.
+[ -n "$bin" ] && [ -f "$bin" ] && [ ! -x "$bin" ] && chmod +x "$bin" 2>/dev/null
+
+# Run (not exec) so that a binary that exists but cannot start (wrong architecture,
+# noexec mount, quarantine: status 126/127) is caught. ctxward itself exits 0, 1 or 2.
+if [ -n "$bin" ] && [ -f "$bin" ]; then
+  "$bin" "$@"
+  rc=$?
+  [ $rc -ne 126 ] && [ $rc -ne 127 ] && exit $rc
+  reason="binary for $plat could not be run"
+elif [ -z "$bin" ]; then
+  reason="no build for platform $plat"
+else
+  reason="binary for $plat is missing (run make dist, or install a release build)"
+fi
+
+if [ "${1:-}" != hook ]; then
+  printf 'ctxward-launch: %s\n' "$reason" >&2
+  exit 127
+fi
+
+# Does a config exist? These are the places os.UserConfigDir() resolves to.
+configured=
+for f in "${XDG_CONFIG_HOME:-$HOME/.config}/ctxward/vars" \
+         "$HOME/Library/Application Support/ctxward/vars" \
+         "${APPDATA:-/nonexistent}/ctxward/vars"; do
+  [ -f "$f" ] && configured=1
+done
+
+msg="ctxward: $reason. Secrets are NOT being protected."
+if [ -n "$configured" ]; then
+  case ${2:-} in
+    pre-tool-use)
+      printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s Tool use is blocked until it is fixed."}}\n' "$msg"
+      exit 0 ;;
+    user-prompt-submit)
+      printf '{"decision":"block","reason":"%s Prompts are blocked until it is fixed.","suppressOriginalPrompt":true}\n' "$msg"
+      exit 0 ;;
+  esac
+fi
+printf '{"systemMessage":"ctxward WARNING: %s"}\n' "$msg"
+exit 0
