@@ -48,7 +48,7 @@ jobs:
           (cd dist && sha256sum * > checksums.txt)
           cat dist/checksums.txt
 
-      - uses: actions/attest-build-provenance@v2
+      - uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
 
