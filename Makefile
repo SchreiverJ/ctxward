@@ -17,27 +17,27 @@ export GOPROXY := off
 
 .PHONY: build dist checksums test plugin-test fmt clean
 
-# Current platform, placed where scripts/ctxward-launch expects it.
+# Current platform, placed where plugin/scripts/ctxward-launch expects it.
 build:
-	mkdir -p libexec/$(HOSTOS)-$(HOSTARCH)
+	mkdir -p plugin/libexec/$(HOSTOS)-$(HOSTARCH)
 	GOOS=$(HOSTOS) GOARCH=$(HOSTARCH) $(GO) build $(GOFLAGS_BUILD) -ldflags '$(LDFLAGS)' \
-		-o libexec/$(HOSTOS)-$(HOSTARCH)/ctxward$(HOSTEXT) $(PKG)
+		-o plugin/libexec/$(HOSTOS)-$(HOSTARCH)/ctxward$(HOSTEXT) $(PKG)
 
-# Cross-compile the five supported targets into libexec/<os>-<arch>/.
+# Cross-compile the five supported targets into plugin/libexec/<os>-<arch>/.
 dist:
 	@for t in $(TARGETS); do \
 		os=$${t%-*}; arch=$${t#*-}; ext=""; [ "$$os" = windows ] && ext=".exe"; \
-		mkdir -p libexec/$$t; \
+		mkdir -p plugin/libexec/$$t; \
 		echo "build $$t"; \
 		GOOS=$$os GOARCH=$$arch $(GO) build $(GOFLAGS_BUILD) -ldflags '$(LDFLAGS)' \
-			-o libexec/$$t/ctxward$$ext $(PKG) || exit 1; \
+			-o plugin/libexec/$$t/ctxward$$ext $(PKG) || exit 1; \
 	done
 
 # SHA256SUMS over the built binaries (paths relative to the repo root).
 checksums:
 	@rm -f SHA256SUMS
 	@for t in $(TARGETS); do \
-		f=libexec/$$t/ctxward; [ -f $$f.exe ] && f=$$f.exe; \
+		f=plugin/libexec/$$t/ctxward; [ -f $$f.exe ] && f=$$f.exe; \
 		[ -f $$f ] || { echo "missing $$f (run make dist)" >&2; exit 1; }; \
 		if command -v sha256sum >/dev/null 2>&1; then sha256sum $$f >> SHA256SUMS; \
 		else shasum -a 256 $$f >> SHA256SUMS; fi; \
@@ -56,4 +56,4 @@ fmt:
 	$(GO) fmt ./...
 
 clean:
-	rm -rf libexec/linux-amd64 libexec/linux-arm64 libexec/darwin-arm64 libexec/darwin-amd64 libexec/windows-amd64 SHA256SUMS
+	rm -rf plugin/libexec/linux-amd64 plugin/libexec/linux-arm64 plugin/libexec/darwin-arm64 plugin/libexec/darwin-amd64 plugin/libexec/windows-amd64 SHA256SUMS

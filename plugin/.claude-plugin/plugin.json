@@ -1,10 +1,10 @@
 {
   "name": "ctxward",
   "displayName": "ctxward",
-  "version": "0.2.6",
-  "description": "Keeps chosen environment variables (their values, and optionally their names) out of Claude Code's context. Best-effort; not a security boundary.",
+  "version": "0.2.7",
+  "description": "Prevent Claude from accidently exposing chosen environment variables (their values, and optionally their names) into Claude Code's context window",
   "author": {
-    "name": "ctxward contributors"
+    "name": "schreiverj"
   },
   "homepage": "https://github.com/SchreiverJ/ctxward",
   "repository": "https://github.com/SchreiverJ/ctxward",

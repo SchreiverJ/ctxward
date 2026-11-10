@@ -1,13 +1,13 @@
 {
   "name": "ctxward",
   "owner": {
-    "name": "ctxward contributors"
+    "name": "schreiverj"
   },
   "plugins": [
     {
       "name": "ctxward",
-      "source": "./",
-      "description": "Keeps chosen environment variables out of Claude Code's context."
+      "source": "./plugin",
+      "description": "Keeps Claude from accidently exposing sensative enviornment variables"
     }
   ],
   "description": "Marketplace for the ctxward plugin."

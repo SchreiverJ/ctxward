@@ -1,9 +1,9 @@
 // Command ctxward keeps chosen environment variables out of Claude Code's
-// context. Claude Code runs it as hooks; a person runs `check`.
+// context using Claude Code Hooks
 //
 //	ctxward hook <event>   one Claude Code hook event (JSON on stdin)
 //	ctxward filter         scrub stdin to stdout, line by line (Monitor streams)
-//	ctxward check          show what the config protects (counts only)
+//	ctxward check          show what the config protects (counts only; --names lists them, outside Claude Code)
 //
 // The config is <user config dir>/ctxward/vars (see the README; `check` prints it). Nothing printed by
 // any command contains a variable name or value.
@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 
 	"ctxward/internal/hook"
 	"ctxward/internal/vault"
@@ -34,7 +35,7 @@ func main() {
 
 func run(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: ctxward hook <event> | filter | check")
+		fmt.Fprintln(os.Stderr, "usage: ctxward hook <event> | filter | check [--names]")
 		return 2
 	}
 	env := loadEnv()
@@ -47,14 +48,13 @@ func run(args []string) int {
 	case "filter":
 		return filter(env)
 	case "check":
-		return check(env)
+		return check(env, args[1:])
 	}
 	fmt.Fprintf(os.Stderr, "ctxward: unknown command %q\n", args[0])
 	return 2
 }
 
-// configPath is where the list of protected variables lives. It is outside any
-// project, and the hooks keep tools away from it.
+// configPath is where the list of protected env variables lives.
 func configPath() string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -64,9 +64,7 @@ func configPath() string {
 }
 
 // loadEnv reads the config and then the variables it names from this
-// process's environment. No config file means nothing is protected; a config
-// that exists but cannot be used leaves Vault nil with Configured set, which
-// the hooks treat as a reason to withhold output.
+// process's environment. No config file means nothing is protected;
 func loadEnv() hook.Env {
 	path := configPath()
 	env := hook.Env{}
@@ -111,18 +109,65 @@ func filter(env hook.Env) int {
 	return 0
 }
 
-func check(env hook.Env) int {
+func check(env hook.Env, args []string) int {
+	names := len(args) > 0 && args[0] == "--names"
+	if names && os.Getenv("CLAUDECODE") != "" {
+		// Output of the shell tool, and of `!` commands, becomes part of the model's context.
+		fmt.Fprintf(os.Stderr, "ctxward: --names is not available inside Claude Code, because the output would reach the model.\nIn a normal terminal (with your variables exported), run:\n  %s check --names\n", selfCommand())
+		return 2
+	}
 	fmt.Println("config:", configPath())
 	switch {
 	case env.Vault != nil:
-		fmt.Printf("protecting %d variables; %d have no usable value (unset, or under %d bytes)\n",
-			env.Stats.Variables, env.Stats.ValuesSkipped, vault.MinLen)
+		var unset, short int
+		var rows []vault.VarStatus
+		if f, err := os.Open(configPath()); err == nil {
+			if specs, err := vault.ParseConfig(f); err == nil {
+				rows = vault.Inspect(specs, os.Getenv)
+			}
+			f.Close()
+		}
+		for _, r := range rows {
+			switch r.State {
+			case vault.Unset:
+				unset++
+			case vault.TooShort:
+				short++
+			}
+		}
+		fmt.Printf("protecting %d variables; %d have no usable value (%d unset, %d under %d bytes)\n",
+			env.Stats.Variables, env.Stats.ValuesSkipped, unset, short, vault.MinLen)
+		if names {
+			label := map[vault.VarState]string{vault.Protected: "protected", vault.Unset: "UNSET", vault.TooShort: fmt.Sprintf("UNDER %d BYTES", vault.MinLen)}
+			for _, r := range rows {
+				mode := "value"
+				if r.Mode == vault.Both {
+					mode = "both"
+				}
+				fmt.Printf("  %-32s %-6s %s\n", r.Name, mode, label[r.State])
+			}
+		} else if env.Stats.ValuesSkipped > 0 {
+			fmt.Printf("to see which, run in a normal terminal:\n  %s check --names\n", selfCommand())
+		}
 		return 0
 	case env.Configured:
 		fmt.Println("problem:", env.ConfigErr)
-		fmt.Println("tool output is withheld until the config is fixed")
+		fmt.Println("tool output is withheld and prompts are blocked until the config is fixed")
 		return 1
 	}
 	fmt.Println("no config file: nothing is protected")
 	return 1
+}
+
+// selfCommand is this binary's full path, quoted for a shell, so it can be pasted
+// into a terminal where `ctxward` is not on PATH.
+func selfCommand() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "ctxward"
+	}
+	if r, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = r
+	}
+	return "'" + strings.ReplaceAll(exe, "'", `'\''`) + "'"
 }

@@ -17,7 +17,7 @@ memory, and never stores them. See [DESIGN.md](DESIGN.md).
 
 Prebuilt binaries for Linux, macOS (Apple Silicon and Intel) and Windows are in the repository; no Go toolchain
 is needed. Update with `/plugin marketplace update ctxward`, remove with `/plugin uninstall ctxward`.
-To build from source instead: `make dist` (needs Go), then `claude --plugin-dir /path/to/ctxward`.
+To build from source instead: `make dist` (needs Go), then `claude --plugin-dir /path/to/ctxward/plugin`.
 
 ## Set up
 
@@ -32,7 +32,10 @@ To build from source instead: `make dist` (needs Go), then `claude --plugin-dir 
    ```
 
 2. Export those variables in the shell that starts Claude Code, then start it.
-3. `ctxward check` (via `scripts/ctxward-launch check`) shows what is protected, as counts only.
+3. In Claude Code, run `! ctxward check`: counts only, including how many values are unset or too short. To see
+   which variables, run `ctxward check --names` in a normal terminal. It refuses inside Claude Code, where the output
+   would reach the model, and prints the full path to paste into a terminal instead. Your own terminal needs
+   your variables exported, as in step 2.
 
 ## What happens
 

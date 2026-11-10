@@ -31,7 +31,7 @@ func runPreToolUse(env Env, in []byte, _ *[]byte) ([]byte, error) {
 	if reason := guard(ev, env.ConfigDir); reason != "" {
 		return deny(reason), nil
 	}
-	if ev.ToolName == "Bash" && leakPending(env, ev) {
+	if ev.ToolName == "Bash" && redactionPending(env, ev) {
 		return askForManual(), nil
 	}
 	if env.Vault == nil && !env.Configured {
@@ -84,7 +84,7 @@ func failPreToolUse(env Env, _ []byte) []byte {
 	if !env.failClosed() {
 		return nil
 	}
-	return deny("ctxward could not inspect this tool call, so it was blocked. Try again; if this persists run `ctxward check`.")
+	return deny("ctxward could not inspect this tool call, so it was blocked. Try again; if it keeps happening, tell the user.")
 }
 
 func stringField(m map[string]json.RawMessage, key string) (string, bool) {
@@ -100,10 +100,9 @@ func stringField(m map[string]json.RawMessage, key string) (string, bool) {
 }
 
 const (
-	reasonConfig      = "ctxward: access to the ctxward config directory is blocked (it lists the protected variable names)."
+	reasonConfig      = "ctxward: access to its config directory is blocked."
 	reasonMonitor     = "ctxward: this Monitor command cannot be wrapped in the output filter (unterminated here-document or trailing backslash), so it was blocked; rewrite it without those."
-	reasonPlaceholder = "ctxward: refusing to write a redaction placeholder into a file. The real value was hidden from you; " +
-		"reference an environment variable instead of writing the placeholder."
+	reasonPlaceholder = "ctxward: refusing to write a redaction placeholder into a file. Reference the variable through the environment instead."
 )
 
 // guard returns a denial reason for tool calls it refuses: touching the config

@@ -1,0 +1,82 @@
+{
+  "description": "ctxward keeps chosen environment variables out of Claude's context. Every hook runs `ctxward hook <event>` through scripts/ctxward-launch. See DESIGN.md, 'How the hooks fit together'.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "description": "Hide values in every tool result (all tools). A hit while the session is in auto mode also leaves the redaction flag.",
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ctxward-launch\" hook post-tool-use",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "description": "A failure's text cannot be rewritten, so only warn the model if it contained a protected value.",
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ctxward-launch\" hook post-tool-use-failure",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "description": "One check before a tool runs. All tools: deny anything that reaches the config directory. Write, Edit, NotebookEdit: refuse content that contains a redaction placeholder. Bash: make the command always exit 0 and print its real exit code as text, because a failing command's output skips the hook that hides secrets. Monitor: pipe the stream through `ctxward filter`, which hides secrets line by line. Bash after a redaction in auto mode: send the call to the permission prompt.",
+        "matcher": "Bash|Monitor|Read|Write|Edit|NotebookEdit|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ctxward-launch\" hook pre-tool-use",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "description": "Only after a redaction in auto mode, and only once: on the next Bash command, approve a harmless echo instead of it and switch the session to manual mode. At any other time this does nothing.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ctxward-launch\" hook permission-request",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "description": "Block a prompt that contains a protected value or hidden name (a prompt cannot be rewritten).",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ctxward-launch\" hook user-prompt-submit",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "description": "Shown to the user only, never added to the model's context: whether protection is active (counts only, never names), so a missing or broken config is not silent.",
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/ctxward-launch\" hook session-start",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

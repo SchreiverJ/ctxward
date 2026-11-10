@@ -21,13 +21,13 @@ func bash(mode string) string {
 	return `{"session_id":"` + sid + `","permission_mode":"` + mode + `","tool_name":"Bash","cwd":"/work","tool_input":{"command":"ls","description":"d"}}`
 }
 
-func TestLeakInAutoModeSwitchesToManualOnce(t *testing.T) {
+func TestRedactionInAutoModeSwitchesToManualOnce(t *testing.T) {
 	env := escalationEnv(t)
 	if resp := run(t, "pre-tool-use", env, bash("auto")); strings.Contains(resp, `"ask"`) {
-		t.Fatal("no leak yet, nothing should be asked:", resp)
+		t.Fatal("nothing redacted yet, nothing should be asked:", resp)
 	}
 	run(t, "post-tool-use", env, post("auto"))
-	if !hasLeakFlag(env, sid) {
+	if !hasRedactionFlag(env, sid) {
 		t.Fatal("a redaction in auto mode must leave the flag")
 	}
 	if resp := run(t, "pre-tool-use", env, bash("auto")); !strings.Contains(resp, `"permissionDecision":"ask"`) {
@@ -42,7 +42,7 @@ func TestLeakInAutoModeSwitchesToManualOnce(t *testing.T) {
 	if strings.Contains(resp, `"command":"ls"`) {
 		t.Fatal("the real command must not be approved:", resp)
 	}
-	if hasLeakFlag(env, sid) {
+	if hasRedactionFlag(env, sid) {
 		t.Fatal("the flag must be removed once the session is switched")
 	}
 	if resp := run(t, "permission-request", env, bash("auto")); resp != "" {
@@ -53,12 +53,12 @@ func TestLeakInAutoModeSwitchesToManualOnce(t *testing.T) {
 func TestEscalationStaysOutOfTheWay(t *testing.T) {
 	env := escalationEnv(t)
 	run(t, "post-tool-use", env, post("default"))
-	if hasLeakFlag(env, sid) {
-		t.Fatal("a leak outside auto mode needs no flag")
+	if hasRedactionFlag(env, sid) {
+		t.Fatal("a redaction outside auto mode needs no flag")
 	}
 	run(t, "post-tool-use", env, post("auto"))
 	// The user took over before the next call: the flag is dropped, nothing is asked.
-	if resp := run(t, "pre-tool-use", env, bash("default")); strings.Contains(resp, `"ask"`) || hasLeakFlag(env, sid) {
+	if resp := run(t, "pre-tool-use", env, bash("default")); strings.Contains(resp, `"ask"`) || hasRedactionFlag(env, sid) {
 		t.Fatal(resp)
 	}
 	// Other permission requests are not ours to answer.

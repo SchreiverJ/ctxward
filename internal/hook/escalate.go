@@ -7,7 +7,7 @@ import (
 	"regexp"
 )
 
-// Leaving auto mode after a leak.
+// Leaving auto mode after a redaction.
 //
 // When a protected value shows up in a tool result while the session is in
 // auto mode, PostToolUse leaves a flag file for the session. The next Bash call
@@ -32,7 +32,7 @@ func flagPath(env Env, session string) string {
 	return filepath.Join(env.ConfigDir, "flags", session)
 }
 
-func setLeakFlag(env Env, session string) {
+func setRedactionFlag(env Env, session string) {
 	p := flagPath(env, session)
 	if p == "" || os.MkdirAll(filepath.Dir(p), 0o700) != nil {
 		return
@@ -40,7 +40,7 @@ func setLeakFlag(env Env, session string) {
 	_ = os.WriteFile(p, nil, 0o600)
 }
 
-func hasLeakFlag(env Env, session string) bool {
+func hasRedactionFlag(env Env, session string) bool {
 	p := flagPath(env, session)
 	if p == "" {
 		return false
@@ -49,21 +49,21 @@ func hasLeakFlag(env Env, session string) bool {
 	return err == nil
 }
 
-func clearLeakFlag(env Env, session string) {
+func clearRedactionFlag(env Env, session string) {
 	if p := flagPath(env, session); p != "" {
 		_ = os.Remove(p)
 	}
 }
 
-// leakPending reports that this call should be sent to the permission prompt.
+// redactionPending reports that this call should be sent to the permission prompt.
 // If the user has already left auto mode themselves, the flag is stale and
 // is removed.
-func leakPending(env Env, ev preToolInput) bool {
-	if !hasLeakFlag(env, ev.SessionID) {
+func redactionPending(env Env, ev preToolInput) bool {
+	if !hasRedactionFlag(env, ev.SessionID) {
 		return false
 	}
 	if ev.PermissionMode != modeAuto {
-		clearLeakFlag(env, ev.SessionID)
+		clearRedactionFlag(env, ev.SessionID)
 		return false
 	}
 	return true
@@ -73,12 +73,12 @@ func askForManual() []byte {
 	return encode(output{HookSpecificOutput: &hookSpecificOut{
 		HookEventName:            "PreToolUse",
 		PermissionDecision:       "ask",
-		PermissionDecisionReason: "ctxward: a protected value was exposed earlier in this session, so a person should review what runs next.",
+		PermissionDecisionReason: "ctxward: protected content was hidden from earlier output. need to switch to manual mode",
 	}})
 }
 
-const switchedMessage = "echo 'ctxward: a protected value was exposed earlier in this session, so the session was switched to manual mode. " +
-	"This command did not run; re-issue it if you still need it.'"
+const switchedMessage = "echo 'ctxward: protected content was hidden earlier, so this session is now in manual mode. " +
+	"This command did not run; re-issue it if needed.'"
 
 // runPermissionRequest only acts on the ask that askForManual caused. Any other
 // permission request, in any mode, is left to the normal prompt.
@@ -87,7 +87,7 @@ func runPermissionRequest(env Env, in []byte, _ *[]byte) ([]byte, error) {
 	if err := json.Unmarshal(in, &ev); err != nil {
 		return nil, errInvalidInput
 	}
-	if ev.ToolName != "Bash" || !leakPending(env, ev) {
+	if ev.ToolName != "Bash" || !redactionPending(env, ev) {
 		return nil, nil
 	}
 	// Only the command: nothing else from the original call (background, timeout, sandbox flags) rides along.
@@ -105,7 +105,7 @@ func runPermissionRequest(env Env, in []byte, _ *[]byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	clearLeakFlag(env, ev.SessionID)
+	clearRedactionFlag(env, ev.SessionID)
 	return out, nil
 }
 

@@ -6,7 +6,7 @@
 //	pre-tool-use           wrap Bash/Monitor so their output can be hidden;
 //	                       keep the model away from the config; refuse to write
 //	                       placeholders into files
-//	permission-request     after a leak in auto mode, switch the session to manual
+//	permission-request     after a redaction in auto mode, switch the session to manual
 //	user-prompt-submit     block a prompt that contains a secret
 //	session-start          tell the user what is protected (counts only)
 //

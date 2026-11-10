@@ -1,13 +1,14 @@
 #!/bin/sh
 # plugin-test.sh: test ctxward the way Claude Code runs it. POSIX sh; works on Linux and macOS.
 #
-#   scripts/plugin-test.sh           hooks only: drives scripts/ctxward-launch with hook JSON (no Claude needed)
+#   scripts/plugin-test.sh           hooks only: drives plugin/scripts/ctxward-launch with hook JSON (no Claude needed)
 #   scripts/plugin-test.sh live      also starts `claude -p --plugin-dir` and checks what the model gets back
 #
 # Everything uses a throwaway config directory and made-up secrets. Your own config is never read.
 
 root=$(cd "$(dirname "$0")/.." && pwd -P) || exit 1
-launch="$root/scripts/ctxward-launch"
+plugin="$root/plugin"
+launch="$plugin/scripts/ctxward-launch"
 
 work=$(mktemp -d) || exit 1
 trap 'rm -rf "$work"' EXIT
@@ -34,7 +35,7 @@ clean() {
   pass "$1"
 }
 
-echo "hooks (via scripts/ctxward-launch)"
+echo "hooks (via plugin/scripts/ctxward-launch)"
 
 post() { hook post-tool-use "{\"tool_name\":\"Bash\",\"tool_response\":{\"stdout\":\"$1\",\"stderr\":\"\"}}"; }
 
@@ -76,14 +77,14 @@ printf 'TEST_DB_PASSWORD both\nTEST_API_TOKEN\n' > "$work/cfg/ctxward/vars"
 echo "leaving auto mode"
 sid=test-session-1
 flag="$work/cfg/ctxward/flags/$sid"
-leak="{\"session_id\":\"$sid\",\"permission_mode\":\"MODE\",\"tool_response\":{\"stdout\":\"$PW\"}}"
+hit="{\"session_id\":\"$sid\",\"permission_mode\":\"MODE\",\"tool_response\":{\"stdout\":\"$PW\"}}"
 bashcall="{\"session_id\":\"$sid\",\"permission_mode\":\"auto\",\"tool_name\":\"Bash\",\"cwd\":\"/tmp\",\"tool_input\":{\"command\":\"ls\"}}"
 
-hook post-tool-use "${leak%MODE*}default${leak#*MODE}" >/dev/null
-[ ! -e "$flag" ] && pass "leak outside auto mode: no flag" || bad "flag set outside auto mode"
-hook pre-tool-use "$bashcall" | grep -q '"ask"' && bad "ask before any leak" || pass "no leak yet: Bash call is not asked"
-hook post-tool-use "${leak%MODE*}auto${leak#*MODE}" >/dev/null
-[ -e "$flag" ] && pass "leak in auto mode: flag set" || bad "flag not set after a leak in auto mode"
+hook post-tool-use "${hit%MODE*}default${hit#*MODE}" >/dev/null
+[ ! -e "$flag" ] && pass "redaction outside auto mode: no flag" || bad "flag set outside auto mode"
+hook pre-tool-use "$bashcall" | grep -q '"ask"' && bad "ask before any redaction" || pass "nothing redacted yet: Bash call is not asked"
+hook post-tool-use "${hit%MODE*}auto${hit#*MODE}" >/dev/null
+[ -e "$flag" ] && pass "redaction in auto mode: flag set" || bad "flag not set after a redaction in auto mode"
 has '"permissionDecision":"ask"' "$(hook pre-tool-use "$bashcall")" && pass "next Bash call goes to the prompt" || bad "next Bash call was not asked"
 out=$(hook permission-request "$bashcall")
 clean "permission request response" "$out"
@@ -98,7 +99,7 @@ if [ "$1" = live ]; then
     bad "claude is not on PATH"
   else
     cd "$work" || exit 1
-    ask() { claude -p --model haiku --plugin-dir "$root" --allowedTools Bash "$1" 2>&1; }
+    ask() { claude -p --model haiku --plugin-dir "$plugin" --allowedTools Bash "$1" 2>&1; }
     out=$(ask 'Run `printenv | grep TEST_` and then `python3 -c "import os; print(os.environ[\"TEST_DB_PASSWORD\"])"`. Quote both outputs exactly.')
     clean "model never sees the values or the hidden name" "$out"
     has '[REDACTED]' "$out" && pass "model saw [REDACTED]" || bad "no [REDACTED] in the model's answer (hooks may not have run)"

@@ -79,6 +79,39 @@ func New(specs []Spec, getenv func(string) string) (*Vault, Stats) {
 	return &Vault{ac: newAutomaton(texts), terms: terms}, st
 }
 
+// VarState says why a variable's value is, or is not, being searched for.
+type VarState int
+
+const (
+	Protected VarState = iota // value is searched for
+	Unset                     // not set (or empty) in this process's environment
+	TooShort                  // set, but under MinLen bytes
+)
+
+// VarStatus is one config line and how it is doing. It carries a name, so it
+// is for the person at a terminal (`ctxward check --names`), never for a hook.
+type VarStatus struct {
+	Name  string
+	Mode  Mode
+	State VarState
+}
+
+// Inspect reports the state of each configured variable. It never returns a value or a length.
+func Inspect(specs []Spec, getenv func(string) string) []VarStatus {
+	out := make([]VarStatus, len(specs))
+	for i, s := range specs {
+		st := Protected
+		switch n := len(getenv(s.Name)); {
+		case n == 0:
+			st = Unset
+		case n < MinLen:
+			st = TooShort
+		}
+		out[i] = VarStatus{s.Name, s.Mode, st}
+	}
+	return out
+}
+
 // Contains reports whether text holds any hidden value or name.
 func (v *Vault) Contains(text string) bool {
 	found := false

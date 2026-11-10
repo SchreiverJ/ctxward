@@ -1,0 +1,10 @@
+#!/bin/sh
+# ctxward: command-line entry point. Claude Code puts a plugin's bin/ directory on the
+# PATH of its Bash tool and of `!` commands, so `ctxward check` works there. Delegates to the launcher,
+# which picks the binary for this platform.
+self=$0
+case $self in
+  */*) dir=${self%/*} ;;
+  *) dir=. ;;
+esac
+exec sh "$dir/../scripts/ctxward-launch" "$@"

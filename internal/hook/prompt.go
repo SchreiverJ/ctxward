@@ -43,5 +43,5 @@ func failUserPromptSubmit(env Env, _ []byte) []byte {
 	if !env.failClosed() {
 		return nil
 	}
-	return blockPrompt("ctxward could not check your prompt for secrets, so it was not sent. Try again; if this persists run `ctxward check`.")
+	return blockPrompt("ctxward could not check your prompt for secrets, so it was not sent. Try again; if this persists run " + env.checkCmd() + ".")
 }

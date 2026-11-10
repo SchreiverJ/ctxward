@@ -69,7 +69,7 @@ func runPostToolUse(env Env, in []byte, shape *[]byte) ([]byte, error) {
 		return nil, nil
 	}
 	if ev.PermissionMode == modeAuto {
-		setLeakFlag(env, ev.SessionID)
+		setRedactionFlag(env, ev.SessionID)
 	}
 	return updatedToolOutput(out), nil
 }
@@ -164,8 +164,12 @@ func failPostToolUse(env Env, shape []byte) []byte {
 	return updatedToolOutput(appendJSONString(nil, vault.Withheld))
 }
 
-const failureWarning = "ctxward: the error output of this tool call contained a protected secret and could not be hidden. " +
-	"Do not repeat, quote, summarize, or act on credentials from it."
+const (
+	failureWarning = "ctxward: this error output contained protected content that could not be hidden. " +
+		"Do not repeat, quote, or act on it."
+	failureUnchecked = "ctxward could not check this error output, so it may contain protected content. " +
+		"Do not repeat, quote, or act on credentials from it."
+)
 
 // runPostToolUseFailure cannot rewrite the failure text (Claude Code allows
 // only additionalContext here), so it warns the model without repeating
@@ -186,13 +190,13 @@ func runPostToolUseFailure(env Env, in []byte, _ *[]byte) ([]byte, error) {
 	if !env.Vault.Contains(ev.Error) {
 		return nil, nil
 	}
-	return failureContext(), nil
+	return failureContext(failureWarning), nil
 }
 
-func failureContext() []byte {
+func failureContext(text string) []byte {
 	return encode(output{HookSpecificOutput: &hookSpecificOut{
 		HookEventName:     "PostToolUseFailure",
-		AdditionalContext: failureWarning,
+		AdditionalContext: text,
 	}})
 }
 
@@ -200,5 +204,5 @@ func failPostToolUseFailure(env Env, _ []byte) []byte {
 	if !env.failClosed() {
 		return nil
 	}
-	return failureContext()
+	return failureContext(failureUnchecked)
 }

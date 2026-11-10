@@ -10,7 +10,7 @@ import (
 // The handlers only run for tools that hooks/hooks.json matches. This ties the
 // two together, so a tool the guard or wrapper handles cannot go unhooked.
 func TestPreToolUseMatchersCoverHandledTools(t *testing.T) {
-	raw, err := os.ReadFile("../../hooks/hooks.json")
+	raw, err := os.ReadFile("../../plugin/hooks/hooks.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestPreToolUseMatchersCoverHandledTools(t *testing.T) {
 
 // escalate.go answers PermissionRequest only for Bash; the hook must be registered for it.
 func TestPermissionRequestIsRegisteredForBash(t *testing.T) {
-	raw, err := os.ReadFile("../../hooks/hooks.json")
+	raw, err := os.ReadFile("../../plugin/hooks/hooks.json")
 	if err != nil {
 		t.Fatal(err)
 	}

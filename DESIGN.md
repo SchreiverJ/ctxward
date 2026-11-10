@@ -70,7 +70,7 @@ One tool call, in the order Claude Code runs the hooks. Every box is `ctxward ho
  model asks for a tool call
    └─► PreToolUse            guard: config dir touched, or [REDACTED] being written? ─► deny
          │                   Bash / Monitor: wrap the command so its output can be scrubbed
-         │                   Bash only, leak flag set and mode is auto ─► ask   (see below)
+         │                   Bash only, redaction flag set and mode is auto ─► ask   (see below)
          ▼
        permission check      allow rules, or the auto mode classifier, or your prompt
          │                   an ask lands on your prompt and fires ─► PermissionRequest
@@ -81,12 +81,12 @@ One tool call, in the order Claude Code runs the hooks. Every box is `ctxward ho
  PostToolUse          PostToolUseFailure
    rewrite every        text cannot be rewritten, so only warn the model
    string and key       (without repeating anything from it)
-   ├─ a hit while the mode is auto ─► write the leak flag
+   ├─ a hit while the mode is auto ─► write the redaction flag
    └─ result goes to the model
  SessionStart (start, resume, clear, compact): tell you what is protected, counts only
 ```
 
-After a leak in auto mode (the scrubber already hid the value; this decides who supervises what comes next):
+After a redaction in auto mode (the value was already hidden; this decides who supervises what comes next):
 
 ```
  PostToolUse        value hidden, mode is auto ─► flag  <config dir>/flags/<session id>
@@ -98,7 +98,7 @@ After a leak in auto mode (the scrubber already hid the value; this decides who 
  PermissionRequest  flag set and auto ─► allow an `echo` instead of the real command,
       │                                  setMode manual, delete the flag
       ▼
- the model reads "switched to manual mode, command did not run"; you approve whatever it tries next
+ the model reads "protected content was hidden earlier, so this session is now in manual mode; this command did not run"; you approve whatever it tries next
 ```
 
 If you leave auto mode yourself before the next call, PreToolUse deletes the flag and asks nothing.
@@ -112,19 +112,19 @@ If you leave auto mode yourself before the next call, PreToolUse deletes the fla
 | Monitor streams | PreToolUse wrapper → `ctxward filter` | stdin→stdout scrub, line by line |
 | User prompt | UserPromptSubmit | **block** (Claude Code cannot rewrite a prompt); echo suppressed |
 | Model writing files | PreToolUse guard | refuse Write/Edit content containing `[REDACTED]` or the withheld marker |
-| Auto mode after a leak | PostToolUse flag → PreToolUse `ask` → PermissionRequest | see below |
+| Auto mode after a redaction | PostToolUse flag → PreToolUse `ask` → PermissionRequest | see below |
 | Config directory | PreToolUse guard | deny Read/Grep/Glob/Bash that touch it |
 
 After rewriting, the result is rescanned, and the concatenation of adjacent strings (stdout + stderr, MCP
 content blocks) is scanned too, so a secret split across them is caught; either failure withholds the output.
 
-**Leaving auto mode.** If a value is redacted while the session is in auto mode, PostToolUse leaves an empty flag
+**Leaving auto mode.** If a value or hidden name is redacted (or output is withheld) while the session is in auto mode, PostToolUse leaves an empty flag
 file for the session (`<config dir>/flags/<session id>`; tools cannot touch that directory). The next Bash call gets a
 PreToolUse `ask`, which goes to the permission prompt instead of the auto mode classifier and fires PermissionRequest.
 That hook approves a harmless `echo` in place of the real command and sets the session mode to `manual`, then removes
 the flag, so a person decides what runs next and ctxward goes back to normal. PermissionRequest does nothing unless the
 flag is set and the mode is `auto`. This is best effort: only Bash is covered (Monitor and other tools get the normal
-prompt), and no flag is written when the config directory is unavailable or the leak arrives through a failure path.
+prompt), and no flag is written when the config directory is unavailable or the redaction happens on a failure path.
 A flag left behind by a session that ends first is inert and may be deleted.
 
 **Fail policy.** The launcher script follows it too: if the binary is missing or cannot run and a config file exists, PreToolUse denies and prompts are blocked; with no config it only warns. No config file: nothing happens, and SessionStart says so. Config file exists and anything
@@ -147,5 +147,6 @@ Only a proxy on `ANTHROPIC_BASE_URL` could cover everything.
 cmd/ctxward/        main: hook <event> | filter | check
 internal/vault/     config, terms (encodings), automaton, Vault.Redact/Contains, Filter
 internal/hook/      one file per event, plus escalate.go (leaving auto mode); rewrite.go (JSON rewriter), wrapper.go (Bash/Monitor wrappers)
-hooks/hooks.json  .claude-plugin/  scripts/ctxward-launch  libexec/<os>-<arch>/ctxward
+plugin/             the installed plugin, and nothing else: hooks/hooks.json, .claude-plugin/plugin.json,
+                    scripts/ctxward-launch, bin/ctxward, libexec/<os>-<arch>/ctxward, LICENSE
 ```

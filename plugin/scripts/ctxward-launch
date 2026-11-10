@@ -73,16 +73,17 @@ for f in "${XDG_CONFIG_HOME:-$HOME/.config}/ctxward/vars" \
   [ -f "$f" ] && configured=1
 done
 
-msg="ctxward: $reason. Secrets are NOT being protected."
+# With a config the answer fails closed. The model-facing text stays short; the detail
+# goes to the person in systemMessage.
 if [ -n "$configured" ]; then
   case ${2:-} in
     pre-tool-use)
-      printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s Tool use is blocked until it is fixed."}}\n' "$msg"
+      printf '{"systemMessage":"ctxward: %s. Tool use is blocked until it is fixed.","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"ctxward is not running, so this tool call was blocked."}}\n' "$reason"
       exit 0 ;;
     user-prompt-submit)
-      printf '{"decision":"block","reason":"%s Prompts are blocked until it is fixed.","suppressOriginalPrompt":true}\n' "$msg"
+      printf '{"decision":"block","reason":"ctxward is not running, so your prompt was not sent. Reason: %s. Fix the install and try again.","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}}\n' "$reason"
       exit 0 ;;
   esac
 fi
-printf '{"systemMessage":"ctxward WARNING: %s"}\n' "$msg"
+printf '{"systemMessage":"ctxward WARNING: %s. Secrets are NOT being protected."}\n' "$reason"
 exit 0
