@@ -12,12 +12,18 @@ launch="$plugin/scripts/ctxward-launch"
 
 work=$(mktemp -d) || exit 1
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/cfg/ctxward"
-printf 'TEST_DB_PASSWORD both\nTEST_API_TOKEN\n' > "$work/cfg/ctxward/vars"
+# Where the binary looks for its config: $XDG_CONFIG_HOME on Linux, but under $HOME on macOS
+# (Go's os.UserConfigDir ignores XDG there), so point HOME at the throwaway directory instead.
+case $(uname -s) in
+  Darwin) export HOME="$work/home"; cfg="$HOME/Library/Application Support" ;;
+  *)      cfg="$work/cfg"; export XDG_CONFIG_HOME="$cfg" ;;
+esac
+mkdir -p "$cfg/ctxward"
+printf 'TEST_DB_PASSWORD both\nTEST_API_TOKEN\n' > "$cfg/ctxward/vars"
 
 PW='hunter2-Prod!9xQ'
 TOKEN='tok_live_ABCDEF123456'
-export XDG_CONFIG_HOME="$work/cfg" TEST_DB_PASSWORD="$PW" TEST_API_TOKEN="$TOKEN"
+export TEST_DB_PASSWORD="$PW" TEST_API_TOKEN="$TOKEN"
 
 fail=0
 pass() { printf '  ok    %s\n' "$1"; }
@@ -53,7 +59,7 @@ clean "prompt with a secret is blocked" "$(hook user-prompt-submit "{\"prompt\":
 has '"block"' "$(hook user-prompt-submit "{\"prompt\":\"my password is $PW\"}")" && pass "prompt decision is block" || bad "prompt was not blocked"
 [ -z "$(hook user-prompt-submit '{"prompt":"hello"}')" ] && pass "ordinary prompt is allowed" || bad "ordinary prompt was blocked"
 
-out=$(hook pre-tool-use "{\"tool_name\":\"Read\",\"cwd\":\"/tmp\",\"tool_input\":{\"file_path\":\"$work/cfg/ctxward/vars\"}}")
+out=$(hook pre-tool-use "{\"tool_name\":\"Read\",\"cwd\":\"/tmp\",\"tool_input\":{\"file_path\":\"$cfg/ctxward/vars\"}}")
 has '"deny"' "$out" && pass "reading the config is denied" || bad "config read was not denied"
 
 out=$(hook pre-tool-use '{"tool_name":"Bash","cwd":"/tmp","tool_input":{"command":"false"}}')
@@ -64,19 +70,19 @@ has ' filter' "$out" && pass "Monitor command is piped through the filter" || ba
 clean "session start reports counts only" "$(hook session-start '{}')"
 
 echo "fail-closed"
-printf 'not a valid line !!\n' > "$work/cfg/ctxward/vars"
+printf 'not a valid line !!\n' > "$cfg/ctxward/vars"
 out=$(post "export TEST_DB_PASSWORD=$PW")
 clean "broken config: output withheld" "$out"
 has 'withheld' "$out" && pass "broken config: withheld marker present" || bad "broken config: output not withheld"
 has '"block"' "$(hook user-prompt-submit '{"prompt":"hi"}')" && pass "broken config: prompts blocked" || bad "broken config: prompt not blocked"
-rm -f "$work/cfg/ctxward/vars"
+rm -f "$cfg/ctxward/vars"
 [ -z "$(post "export TEST_DB_PASSWORD=$PW")" ] && pass "no config: nothing happens" || bad "no config: output was changed"
 
-printf 'TEST_DB_PASSWORD both\nTEST_API_TOKEN\n' > "$work/cfg/ctxward/vars"
+printf 'TEST_DB_PASSWORD both\nTEST_API_TOKEN\n' > "$cfg/ctxward/vars"
 
 echo "leaving auto mode"
 sid=test-session-1
-flag="$work/cfg/ctxward/flags/$sid"
+flag="$cfg/ctxward/flags/$sid"
 hit="{\"session_id\":\"$sid\",\"permission_mode\":\"MODE\",\"tool_response\":{\"stdout\":\"$PW\"}}"
 bashcall="{\"session_id\":\"$sid\",\"permission_mode\":\"auto\",\"tool_name\":\"Bash\",\"cwd\":\"/tmp\",\"tool_input\":{\"command\":\"ls\"}}"
 
