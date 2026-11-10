@@ -1,0 +1,58 @@
+name: Release
+
+# Push a tag like v0.2.8 to publish a release. The tag must match the version in
+# plugin/.claude-plugin/plugin.json and point at a commit on main.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  GO_VERSION: "1.27.3"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: tag matches plugin version and is on main
+        run: |
+          want="v$(jq -r .version plugin/.claude-plugin/plugin.json)"
+          test "$want" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME but plugin.json says $want"; exit 1; }
+          git merge-base --is-ancestor HEAD origin/main || { echo "tag is not on main"; exit 1; }
+
+      - name: test
+        run: make test
+
+      - name: rebuild and compare with the committed binaries
+        run: make verify
+
+      - name: collect release files
+        run: |
+          mkdir dist
+          for t in linux-amd64 linux-arm64 darwin-arm64 darwin-amd64 windows-amd64; do
+            ext=""; [ "${t%%-*}" = windows ] && ext=".exe"
+            cp "plugin/libexec/$t/ctxward$ext" "dist/ctxward_${GITHUB_REF_NAME}_$t$ext"
+          done
+          (cd dist && sha256sum * > checksums.txt)
+          cat dist/checksums.txt
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "$GITHUB_REF_NAME"

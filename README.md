@@ -4,6 +4,10 @@
 
 # ctxward
 
+[![CI](https://github.com/SchreiverJ/ctxward/actions/workflows/ci.yml/badge.svg)](https://github.com/SchreiverJ/ctxward/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/SchreiverJ/ctxward)](https://github.com/SchreiverJ/ctxward/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Claude Code plugin that keeps chosen environment variables out of what the model sees: their **values**, and
 optionally their **names**. It works on tool output and on your prompts.
 
@@ -72,3 +76,13 @@ make plugin-test  # drive the hooks through the launcher (ARGS=live also runs cl
 go test ./internal/vault -run xxx -bench .
 ```
 
+## Releasing
+
+1. Bump `version` in `plugin/.claude-plugin/plugin.json`, then `make test dist checksums` and commit the result
+   (the binaries and `SHA256SUMS` are committed, and CI fails if they differ from a rebuild: `make verify`).
+2. Push to `main` and wait for CI.
+3. `git tag v<version> && git push origin v<version>`. The Release workflow checks the tag against `plugin.json`,
+   rebuilds, publishes the binaries and `checksums.txt` with build provenance, and generates the notes.
+
+The Go version is pinned in both workflows (`GO_VERSION`) because it is embedded in the binaries. Change it there
+and in your local toolchain together, then rebuild.

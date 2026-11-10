@@ -3,7 +3,7 @@
 SHELL := /bin/sh
 GO      ?= go
 PKG     := ./cmd/ctxward
-GOFLAGS_BUILD := -trimpath
+GOFLAGS_BUILD := -trimpath -buildvcs=false
 LDFLAGS := -s -w
 TARGETS := linux-amd64 linux-arm64 darwin-arm64 darwin-amd64 windows-amd64
 
@@ -15,7 +15,7 @@ export CGO_ENABLED := 0
 export GOFLAGS := -mod=readonly
 export GOPROXY := off
 
-.PHONY: build dist checksums test plugin-test fmt clean
+.PHONY: build dist checksums verify test plugin-test fmt clean
 
 # Current platform, placed where plugin/scripts/ctxward-launch expects it.
 build:
@@ -43,6 +43,15 @@ checksums:
 		else shasum -a 256 $$f >> SHA256SUMS; fi; \
 	done
 	@cat SHA256SUMS
+
+# Rebuild everything and fail if it differs from what is committed. Builds are reproducible
+# (-trimpath, -buildvcs=false so no git state is embedded, CGO off, pinned Go version), so a difference means the source or toolchain moved.
+# The old binaries are deleted first: `go build -o` leaves an existing file alone when its build ID
+# matches, so a tampered committed binary would otherwise survive the rebuild and pass.
+verify:
+	@for t in $(TARGETS); do rm -f plugin/libexec/$$t/ctxward plugin/libexec/$$t/ctxward.exe; done
+	@$(MAKE) --no-print-directory dist checksums
+	git diff --exit-code -- SHA256SUMS plugin/libexec
 
 test:
 	$(GO) vet ./...
