@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/ctxward-logo.jpg" alt="ctxward: a circuit-board shield" width="320">
+</p>
+
 # ctxward
 
 A Claude Code plugin that keeps chosen environment variables out of what the model sees: their **values**, and
