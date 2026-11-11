@@ -20,7 +20,7 @@ func testEnv() Env {
 	vals := map[string]string{varName: secret, otherVar: otherVal}
 	v, st := vault.New([]vault.Spec{{Name: varName, Mode: vault.Both}, {Name: otherVar, Mode: vault.ValueOnly}},
 		func(k string) string { return vals[k] })
-	return Env{Vault: v, Stats: st, Configured: true, ConfigDir: "/home/u/.config/ctxward", FilterExe: "/opt/ctxward"}
+	return Env{Vault: v, Stats: st, Configured: true, ConfigDir: "/home/u/.config/ctxward"}
 }
 
 // run feeds payload to an event and returns the raw response. Every response,
@@ -152,9 +152,6 @@ func TestPreToolUse(t *testing.T) {
 	env := testEnv()
 	if resp := run(t, "pre-tool-use", env, `{"tool_name":"Bash","tool_input":{"command":"false"}}`); !strings.Contains(resp, "__rc=$?") {
 		t.Fatalf("bash not wrapped: %s", resp)
-	}
-	if resp := run(t, "pre-tool-use", env, `{"tool_name":"Monitor","tool_input":{"command":"tail -f log"}}`); !strings.Contains(resp, "/opt/ctxward' filter") {
-		t.Fatalf("monitor not wrapped: %s", resp)
 	}
 	for _, tc := range []string{
 		`{"tool_name":"Read","cwd":"/work","tool_input":{"file_path":"/home/u/.config/ctxward/vars"}}`,

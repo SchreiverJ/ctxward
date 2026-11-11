@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -98,7 +99,12 @@ func TestWrapperBehaviourInBash(t *testing.T) {
 				t.Fatal("not wrapped")
 			}
 			start := t.TempDir()
-			cmd := exec.Command(bash, "-c", wrapped+"\necho \"::pwd=$PWD\"")
+			// Git Bash reports /tmp/... for $PWD; `pwd -W` gives the Windows path to compare against.
+			pwdExpr := `"$PWD"`
+			if runtime.GOOS == "windows" {
+				pwdExpr = `"$(pwd -W)"`
+			}
+			cmd := exec.Command(bash, "-c", wrapped+"\necho ::pwd="+pwdExpr)
 			cmd.Dir = start
 			out, err := cmd.CombinedOutput()
 			if _, isExit := err.(*exec.ExitError); err != nil && !isExit {
@@ -113,7 +119,15 @@ func TestWrapperBehaviourInBash(t *testing.T) {
 			if wantPwd == "" {
 				wantPwd = start
 			}
-			if real, err := filepath.EvalSymlinks(wantPwd); err != nil || (pwd != wantPwd && pwd != real) {
+			// Compare resolved paths: temp dirs are symlinks on macOS and 8.3 short names on Windows.
+			resolve := func(p string) string {
+				p = filepath.FromSlash(p)
+				if r, err := filepath.EvalSymlinks(p); err == nil {
+					return r
+				}
+				return p
+			}
+			if resolve(pwd) != resolve(wantPwd) {
 				t.Errorf("pwd %q, want %q", pwd, wantPwd)
 			}
 		})
