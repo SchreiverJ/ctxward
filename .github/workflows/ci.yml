@@ -27,8 +27,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -36,19 +36,39 @@ jobs:
         if: runner.os == 'Linux'
         run: test -z "$(gofmt -l .)" || { gofmt -d .; exit 1; }
       - run: go vet ./...
-      - run: go test -race ./...
+      # On failure, copy the interesting lines into annotations: they are readable through the
+      # API without logging in, which the raw job logs are not.
+      - name: go test
+        shell: bash
         env:
           CGO_ENABLED: "1"
+        run: |
+          set +e   # the default is -e, which would end the step before the annotations are written
+          go test -race ./... 2>&1 | tr -d '\r' | tee test.out
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            grep -E -- '^(--- FAIL|FAIL|panic:)|_test\.go:[0-9]+|cgo|gcc|cannot |undefined|not found' test.out \
+              | head -10 | sed 's/%/%25/g; s/^/::error::/'
+            exit "$rc"
+          fi
       - name: hooks through the launcher
         if: runner.os != 'Windows'
-        run: sh scripts/plugin-test.sh
+        shell: bash
+        run: |
+          set +e
+          sh scripts/plugin-test.sh 2>&1 | tee hooks.out
+          rc=${PIPESTATUS[0]}
+          if [ "$rc" -ne 0 ]; then
+            grep -E -- 'FAIL|failed' hooks.out | head -10 | sed 's/%/%25/g; s/^/::error::/'
+            exit "$rc"
+          fi
 
   binaries:
     name: committed binaries match the source
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
