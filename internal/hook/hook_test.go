@@ -3,6 +3,8 @@ package hook
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -16,11 +18,27 @@ const (
 	otherVar = "GH_TOKEN"
 )
 
+// absPath turns a Unix-style absolute path from test data into one that is absolute on
+// this OS: Windows needs a drive letter, or the guard cannot resolve it (and the Monitor
+// wrapper refuses it).
+func absPath(p string) string {
+	if runtime.GOOS == "windows" {
+		return filepath.FromSlash("C:" + p)
+	}
+	return p
+}
+
+// toolCall builds a PreToolUse payload, with the JSON escaping that Windows paths need.
+func toolCall(tool, cwd string, input map[string]string) string {
+	b, _ := json.Marshal(map[string]any{"tool_name": tool, "cwd": cwd, "tool_input": input})
+	return string(b)
+}
+
 func testEnv() Env {
 	vals := map[string]string{varName: secret, otherVar: otherVal}
 	v, st := vault.New([]vault.Spec{{Name: varName, Mode: vault.Both}, {Name: otherVar, Mode: vault.ValueOnly}},
 		func(k string) string { return vals[k] })
-	return Env{Vault: v, Stats: st, Configured: true, ConfigDir: "/home/u/.config/ctxward"}
+	return Env{Vault: v, Stats: st, Configured: true, ConfigDir: absPath("/home/u/.config/ctxward")}
 }
 
 // run feeds payload to an event and returns the raw response. Every response,
@@ -154,8 +172,8 @@ func TestPreToolUse(t *testing.T) {
 		t.Fatalf("bash not wrapped: %s", resp)
 	}
 	for _, tc := range []string{
-		`{"tool_name":"Read","cwd":"/work","tool_input":{"file_path":"/home/u/.config/ctxward/vars"}}`,
-		`{"tool_name":"Grep","cwd":"/work","tool_input":{"path":"/home/u/.config"}}`,
+		toolCall("Read", absPath("/work"), map[string]string{"file_path": absPath("/home/u/.config/ctxward/vars")}),
+		toolCall("Grep", absPath("/work"), map[string]string{"path": absPath("/home/u/.config")}),
 		`{"tool_name":"Bash","cwd":"/work","tool_input":{"command":"cat ~/.config/ctxward/vars"}}`,
 		`{"tool_name":"Bash","cwd":"/work","tool_input":{"command":"cat $XDG_CONFIG_HOME/ctxward/vars"}}`,
 		`{"tool_name":"Write","cwd":"/work","tool_input":{"file_path":"/work/a.py","content":"key = '[REDACTED]'"}}`,
@@ -165,7 +183,7 @@ func TestPreToolUse(t *testing.T) {
 			t.Errorf("not denied: %s -> %s", tc, resp)
 		}
 	}
-	if resp := run(t, "pre-tool-use", env, `{"tool_name":"Read","cwd":"/work","tool_input":{"file_path":"/work/main.py"}}`); resp != "" {
+	if resp := run(t, "pre-tool-use", env, toolCall("Read", absPath("/work"), map[string]string{"file_path": absPath("/work/main.py")})); resp != "" {
 		t.Fatal(resp)
 	}
 }

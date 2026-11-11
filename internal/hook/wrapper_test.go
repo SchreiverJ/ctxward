@@ -71,6 +71,7 @@ func TestWrapperBehaviourInBash(t *testing.T) {
 		t.Skip("bash not available")
 	}
 	tmp := t.TempDir()
+	bashTmp := filepath.ToSlash(tmp) // bash eats backslashes in Windows paths
 	tests := []struct {
 		name    string
 		cmd     string
@@ -89,8 +90,8 @@ func TestWrapperBehaviourInBash(t *testing.T) {
 		{"trailing comment fail", "false # trailing", "[exit code 1]\n", ""},
 		{"multiline", "echo 1\necho 2\nfalse", "1\n2\n[exit code 1]\n", ""},
 		{"quotes", `echo "it's" 'a "b"'`, "it's a \"b\"\n", ""},
-		{"cd persists", "cd " + tmp, "", tmp},
-		{"cd persists on failure", "cd " + tmp + " && false", "[exit code 1]\n", tmp},
+		{"cd persists", "cd " + bashTmp, "", tmp},
+		{"cd persists on failure", "cd " + bashTmp + " && false", "[exit code 1]\n", tmp},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -134,41 +135,22 @@ func TestWrapperBehaviourInBash(t *testing.T) {
 	}
 }
 
-func TestWrapMonitorCommandTable(t *testing.T) {
-	const exe = "/opt/safe env/it's/ctxward"
-	const q = `'/opt/safe env/it'\''s/ctxward'`
-	tests := []struct {
-		name string
-		cmd  string
-		exe  string
-		want string // "" = left unwrapped
-	}{
-		{"simple", "tail -f app.log", exe, "{ tail -f app.log\n} 2>&1 | " + q + " filter"},
-		{"multiline", "while true; do\n  date\n  sleep 1\ndone", exe, "{ while true; do\n  date\n  sleep 1\ndone\n} 2>&1 | " + q + " filter"},
-		{"heredoc", "cat <<EOF\nhi\nEOF", exe, "{ cat <<EOF\nhi\nEOF\n} 2>&1 | " + q + " filter"},
-		{"quotes", `echo "a 'b'" 'c "d"'`, exe, "{ echo \"a 'b'\" 'c \"d\"'\n} 2>&1 | " + q + " filter"},
-		{"trailing comment", "tail -f x # note", exe, "{ tail -f x # note\n} 2>&1 | " + q + " filter"},
-		{"exit is not special", "exit 3", exe, "{ exit 3\n} 2>&1 | " + q + " filter"},
-		{"plain exe", "ls", "/usr/bin/ctxward", "{ ls\n} 2>&1 | '/usr/bin/ctxward' filter"},
-		{"newline in exe", "ls", "/a\nb/ctxward", "{ ls\n} 2>&1 | '/a\nb/ctxward' filter"},
-		{"empty exe", "ls", "", ""},
-		{"relative exe", "ls", "ctxward", ""},
-		{"nul exe", "ls", "/a\x00b", ""},
-		{"empty cmd", " ", exe, ""},
-		{"unterminated heredoc", "cat <<EOF\nx", exe, ""},
-		{"continuation", "echo a \\", exe, ""},
+// TestWrapMonitorLeavesUnwrapped covers the inputs the Monitor wrapper must refuse.
+// What a wrapped command actually does is checked in TestWrapMonitorInBash.
+func TestWrapMonitorLeavesUnwrapped(t *testing.T) {
+	exe := absPath("/usr/bin/ctxward")
+	tests := []struct{ name, cmd, exe string }{
+		{"empty exe", "ls", ""},
+		{"relative exe", "ls", "ctxward"},
+		{"nul exe", "ls", absPath("/a\x00b")},
+		{"empty cmd", " ", exe},
+		{"unterminated heredoc", "cat <<EOF\nx", exe},
+		{"continuation", "echo a \\", exe},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := WrapMonitorCommand(tt.cmd, tt.exe)
-			if tt.want == "" {
-				if ok || got != tt.cmd {
-					t.Fatalf("want unwrapped, got ok=%v %q", ok, got)
-				}
-				return
-			}
-			if !ok || got != tt.want {
-				t.Fatalf("got ok=%v\n%q\nwant\n%q", ok, got, tt.want)
+			if got, ok := WrapMonitorCommand(tt.cmd, tt.exe); ok || got != tt.cmd {
+				t.Fatalf("want unwrapped, got ok=%v %q", ok, got)
 			}
 		})
 	}
