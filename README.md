@@ -53,7 +53,7 @@ To build from source instead: `make dist` (needs Go), then `claude --plugin-dir 
 | You type a value or a hidden name in a prompt | the prompt is blocked, nothing is sent, the reason names nothing |
 | A value is hidden while you are in auto mode | the next Bash command is not run; the session switches to manual mode so you decide what happens next |
 | The model tries to save `[REDACTED]` into a file | refused (it would corrupt your code) |
-| The model tries to read the config | refused |
+| The model tries to read the config | refused (accidental reads only; a command that builds the path indirectly gets past it) |
 | Config exists but is broken | output is withheld and prompts are blocked until you fix it |
 | No config | nothing is protected; SessionStart says so |
 
@@ -67,6 +67,14 @@ Encodings searched: raw, URL-encoded, base64.
 async subagent results, and Bash output over 30 KB (spilled raw to disk by Claude Code). A name or value in any of
 these reaches the model. A model that deliberately splits or re-encodes output also gets through, as does any
 secret not in your list.
+
+## Verifying the binaries
+
+The binaries in `plugin/libexec/` are unsigned, and installs pull them from this repository.
+
+- `make verify` in a fresh clone rebuilds them and fails on any difference (needs the Go version pinned in the workflows).
+- `gh attestation verify plugin/libexec/linux-amd64/ctxward --repo SchreiverJ/ctxward` checks a binary against the
+  build attestation published with each release.
 
 ## Develop
 

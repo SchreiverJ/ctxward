@@ -104,6 +104,10 @@ func filter(env hook.Env) int {
 		env.Vault = &vault.Vault{}
 	}
 	if err := env.Vault.Filter(os.Stdin, os.Stdout); err != nil {
+		if errors.Is(err, vault.ErrLineTooLong) {
+			// Fixed text, so it is safe to emit; without it the stream just goes silent.
+			fmt.Fprintln(os.Stdout, "[ctxward: output line over 1 MiB, stream stopped]")
+		}
 		return 1
 	}
 	return 0
